@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom"; // Import useNavigate
 import {
   HomeIcon,
   CurrencyRupeeIcon,
@@ -6,8 +7,9 @@ import {
   UserIcon,
   PlusIcon,
   CheckCircleIcon,
+  ArrowRightOnRectangleIcon,
 } from "@heroicons/react/24/outline";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import {
   collection,
   doc,
@@ -21,8 +23,10 @@ import hi from "../../assets/Home/hi.svg";
 
 const AdminHomePage = () => {
   /* ================= BASIC ================= */
+  const navigate = useNavigate(); // Initialize hook
   const [activeTab, setActiveTab] = useState("tenants");
   const [adminName, setAdminName] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
   const [loading, setLoading] = useState(true);
 
   /* ================= TENANTS ================= */
@@ -61,7 +65,14 @@ const AdminHomePage = () => {
   /* ================= LOAD DATA ================= */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) return;
+      if (!user) {
+        // Optional: Auto-redirect if user is not found (extra safety)
+        navigate("/");
+        return;
+      }
+
+      // Set Email
+      setAdminEmail(user.email);
 
       // 1. Admin Name
       const adminSnap = await getDoc(doc(db, "organiser", user.email));
@@ -87,7 +98,7 @@ const AdminHomePage = () => {
       // 4. Maintenance
       const maintSnap = await getDocs(collection(db, "maintenance"));
       const maintData = maintSnap.docs.map((d) => ({
-        id: d.id, // This is the room number per your schema
+        id: d.id,
         ...d.data(),
       }));
       setMaintenanceList(maintData);
@@ -96,11 +107,16 @@ const AdminHomePage = () => {
     });
 
     return () => unsub();
-  }, []);
+  }, [navigate]);
 
   /* ================= ADD TENANT ================= */
   const handleAddTenant = async () => {
-    if (!newTenant.id || !newTenant.name || !newTenant.contact || !newTenant.room)
+    if (
+      !newTenant.id ||
+      !newTenant.name ||
+      !newTenant.contact ||
+      !newTenant.room
+    )
       return;
 
     await setDoc(doc(db, "tenants", newTenant.id), {
@@ -152,10 +168,7 @@ const AdminHomePage = () => {
 
   /* ================= MAINTENANCE LOGIC ================= */
   const handleAddMaintenance = async () => {
-    // Validation
     if (!newMaint.room || !newMaint.desc) return;
-
-    // Design: Doc ID is the room number
     const docId = newMaint.room;
 
     await setDoc(doc(db, "maintenance", docId), {
@@ -163,9 +176,7 @@ const AdminHomePage = () => {
       status: "undone",
     });
 
-    // Update Local State (Check if exists to update or add new)
     setMaintenanceList((prev) => {
-      // Remove existing if overwriting (since ID is unique)
       const filtered = prev.filter((item) => item.id !== docId);
       return [
         ...filtered,
@@ -178,14 +189,21 @@ const AdminHomePage = () => {
   };
 
   const markMaintenanceDone = async (roomId) => {
-    // Requirement: If status is done, remove the complaint
     try {
       await deleteDoc(doc(db, "maintenance", roomId));
-
-      // Remove from local state
       setMaintenanceList((prev) => prev.filter((item) => item.id !== roomId));
     } catch (error) {
       console.error("Error deleting maintenance doc:", error);
+    }
+  };
+
+  /* ================= LOGOUT ================= */
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      navigate("/"); // Redirect to login page
+    } catch (error) {
+      console.error("Logout Error:", error);
     }
   };
 
@@ -203,7 +221,6 @@ const AdminHomePage = () => {
       t.id.toLowerCase().includes(rentSearchQuery.toLowerCase())
   );
 
-  // Maintenance search by Room ID (which is the doc ID)
   const filteredMaintenance = maintenanceList.filter((m) =>
     m.id.toLowerCase().includes(maintenanceSearch.toLowerCase())
   );
@@ -212,20 +229,22 @@ const AdminHomePage = () => {
   return (
     <div className="w-full min-h-screen bg-[#F6FCF7] pb-20">
       {/* HERO */}
-      <div className="relative max-w-3xl mx-auto px-4 pt-6 mb-6">
-        <img src={hi} className="w-full rounded-2xl" alt="Welcome" />
-        <div className="absolute top-10 left-6 text-white">
-          <h1 className="text-xl font-semibold">Welcome back</h1>
-          <h2 className="text-3xl font-extrabold">{adminName}</h2>
+      {activeTab !== "profile" && (
+        <div className="relative max-w-3xl mx-auto px-4 pt-6 mb-6">
+          <img src={hi} className="w-full rounded-2xl" alt="Welcome" />
+          <div className="absolute top-10 left-6 text-white">
+            <h1 className="text-xl font-semibold">Welcome back</h1>
+            <h2 className="text-3xl font-extrabold">{adminName}</h2>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ================= TENANTS TAB ================= */}
       {activeTab === "tenants" && (
         <>
           <div className="max-w-3xl mx-auto px-4 flex gap-2 mb-4">
             <input
-              placeholder="Search tenants (name / id / room)..."
+              placeholder="Search tenants..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="flex-1 px-4 py-3 border rounded-lg"
@@ -256,7 +275,7 @@ const AdminHomePage = () => {
         <>
           <div className="max-w-3xl mx-auto px-4 mb-3">
             <input
-              placeholder="Search tenant (name / id)..."
+              placeholder="Search tenant..."
               value={rentSearchQuery}
               onChange={(e) => setRentSearchQuery(e.target.value)}
               className="w-full px-4 py-3 border rounded-lg"
@@ -314,7 +333,7 @@ const AdminHomePage = () => {
         <>
           <div className="max-w-3xl mx-auto px-4 flex gap-2 mb-4">
             <input
-              placeholder="Search by Room Number..."
+              placeholder="Search by Room..."
               value={maintenanceSearch}
               onChange={(e) => setMaintenanceSearch(e.target.value)}
               className="flex-1 px-4 py-3 border rounded-lg"
@@ -350,7 +369,7 @@ const AdminHomePage = () => {
                   <button
                     onClick={() => markMaintenanceDone(item.id)}
                     className="p-2 bg-green-50 text-green-600 rounded-full hover:bg-green-100"
-                    title="Mark as Done (Delete)"
+                    title="Mark as Done"
                   >
                     <CheckCircleIcon className="h-6 w-6" />
                   </button>
@@ -361,6 +380,30 @@ const AdminHomePage = () => {
         </>
       )}
 
+      {/* ================= PROFILE TAB ================= */}
+      {activeTab === "profile" && (
+        <div className="min-h-screen pt-12 px-4 flex justify-center bg-[#F6FCF7]">
+          <div className="bg-white p-8 rounded-3xl shadow-lg w-full max-w-sm flex flex-col items-center h-fit">
+            <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mb-6">
+              <UserIcon className="w-12 h-12 text-blue-500" />
+            </div>
+
+            <h2 className="text-2xl font-bold text-gray-800 mb-1">
+              {adminName}
+            </h2>
+            <p className="text-gray-500 mb-8 font-medium">{adminEmail}</p>
+
+            <button
+              onClick={handleLogout}
+              className="w-full py-3 bg-red-50 text-red-600 font-semibold rounded-xl flex items-center justify-center gap-2 hover:bg-red-100 transition-colors"
+            >
+              <ArrowRightOnRectangleIcon className="h-5 w-5" />
+              Logout
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ================= RENT MODAL ================= */}
       {showRentModal && selectedTenant && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
@@ -368,7 +411,6 @@ const AdminHomePage = () => {
             <h3 className="text-lg font-semibold mb-4">
               Rent – {selectedTenant.name}
             </h3>
-
             {Object.entries(rentMap[selectedTenant.id] || {}).map(
               ([month, data]) => {
                 const due = data?.pendingDue ?? 0;
@@ -412,7 +454,6 @@ const AdminHomePage = () => {
                 );
               }
             )}
-
             <div className="text-right mt-4">
               <button
                 onClick={() => setShowRentModal(false)}
@@ -463,7 +504,6 @@ const AdminHomePage = () => {
                 setNewTenant({ ...newTenant, room: e.target.value })
               }
             />
-
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowAddTenant(false)}
@@ -488,9 +528,8 @@ const AdminHomePage = () => {
           <div className="bg-white p-6 rounded-xl w-[90%] max-w-sm">
             <h3 className="text-lg font-semibold mb-3">Add Complaint</h3>
             <p className="text-xs text-gray-500 mb-3">
-              One complaint per room (overwrites existing).
+              One complaint per room.
             </p>
-
             <input
               placeholder="Room Number"
               className="w-full mb-2 px-3 py-2 border rounded"
@@ -508,7 +547,6 @@ const AdminHomePage = () => {
                 setNewMaint({ ...newMaint, desc: e.target.value })
               }
             />
-
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowAddMaint(false)}
@@ -559,7 +597,12 @@ const AdminHomePage = () => {
           <span className="text-xs">Maint.</span>
         </button>
 
-        <button className="flex flex-col items-center text-gray-500">
+        <button
+          onClick={() => setActiveTab("profile")}
+          className={`flex flex-col items-center ${
+            activeTab === "profile" ? "text-blue-500" : "text-gray-500"
+          }`}
+        >
           <UserIcon className="h-6 w-6" />
           <span className="text-xs">Profile</span>
         </button>
