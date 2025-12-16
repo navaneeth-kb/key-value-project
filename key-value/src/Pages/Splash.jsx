@@ -15,13 +15,13 @@ const Splash = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Handlers for login and sign up buttons
-  const handleLogin = () => {
-    navigate('/login'); // Navigate to login page
+  // Handlers for logins
+  const handleAdminLogin = () => {
+    navigate('/login'); // Navigate to Admin login page
   };
 
-  const handleSignUp = () => {
-    navigate('/signup'); // Navigate to signup page
+  const handleStudentLogin = () => {
+    navigate('/student-login'); // Navigate to Student login page
   };
 
   return (
@@ -42,21 +42,30 @@ const Splash = () => {
       {/* Content after the logo animation */}
       {showButtons && (
         <div className="flex flex-col items-center animate-fade-in-up">
-          <div className="text-[#246d8c] text-[32px] font-medium font-['Inter'] mb-4">
+          <div className="text-[#246d8c] text-[32px] font-medium font-['Inter'] mb-8">
             Let’s get started
           </div>
           
+          {/* Admin Button */}
           <button
-            onClick={handleLogin}
+            onClick={handleAdminLogin}
             className="w-[295px] py-[13px] bg-[#246d8c] text-white text-base font-medium font-['Inter'] rounded-md mb-4 shadow-md hover:bg-[#1d5870] transition-colors"
           >
-            Admin
+            Admin Login
+          </button>
+
+          {/* Student Login Button */}
+          <button
+            onClick={handleStudentLogin}
+            className="w-[295px] py-[13px] bg-[#246d8c] text-white text-base font-medium font-['Inter'] rounded-md shadow-md hover:bg-[#1d5870] transition-colors"
+          >
+            Student Login
           </button>
           
         </div>
       )}
 
-      {/* Basic Keyframes for animation if not configured in tailwind.config.js */}
+      {/* Basic Keyframes for animation */}
       <style>{`
         @keyframes fadeIn {
           0% { opacity: 0; transform: translateY(-10px); }
