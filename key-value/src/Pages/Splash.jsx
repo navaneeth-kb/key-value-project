@@ -48,13 +48,13 @@ const Splash = () => {
             onClick={handleLogin}
             className="w-[295px] py-[13px] bg-[#246d8c] text-white text-base font-medium font-['Inter'] rounded-md mb-4"
           >
-            Login
+            Admin
           </button>
           <button
             onClick={handleSignUp}
             className="w-[295px] py-[13px] bg-[#246d8c] text-white text-base font-medium font-['Inter'] rounded-md"
           >
-            Sign up
+            Students
           </button>
         </>
       )}
