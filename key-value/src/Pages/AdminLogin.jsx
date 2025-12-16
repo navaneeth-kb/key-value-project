@@ -4,27 +4,26 @@ import {
   signInWithEmailAndPassword,
   GoogleAuthProvider,
   signInWithPopup,
+  signOut,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
 import google from "../assets/Login/google.svg";
 
-const Login = () => {
+const AdminLogin = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-
   const navigate = useNavigate();
 
   // =========================
-  // EMAIL + PASSWORD LOGIN
+  // EMAIL + PASSWORD (ADMIN ONLY)
   // =========================
   const handleEmailSignIn = async (e) => {
     e.preventDefault();
     setError("");
 
     try {
-      // 1️⃣ Firebase Auth login
       const userCredential = await signInWithEmailAndPassword(
         auth,
         email,
@@ -33,24 +32,25 @@ const Login = () => {
 
       const userEmail = userCredential.user.email;
 
-      // 2️⃣ Check organiser role in Firestore
+      // Check organiser collection
       const organiserRef = doc(db, "organiser", userEmail);
       const organiserSnap = await getDoc(organiserRef);
 
-      // 3️⃣ Role-based redirect
-      if (organiserSnap.exists()) {
-        navigate("/organiser");
-      } else {
-        navigate("/homepage");
+      if (!organiserSnap.exists()) {
+        await signOut(auth);
+        setError("Access denied. You are not an organiser.");
+        return;
       }
+
+      navigate("/adminHomepage");
     } catch (err) {
       console.error(err);
-      setError("Failed to log in. Please check your credentials.");
+      setError("Invalid email or password.");
     }
   };
 
   // =========================
-  // GOOGLE LOGIN
+  // GOOGLE SIGN-IN (ADMIN ONLY)
   // =========================
   const handleGoogleSignIn = async () => {
     setError("");
@@ -60,14 +60,16 @@ const Login = () => {
       const userCredential = await signInWithPopup(auth, provider);
       const userEmail = userCredential.user.email;
 
-      const organiserRef = doc(db, "organizers", userEmail);
+      const organiserRef = doc(db, "organiser", userEmail);
       const organiserSnap = await getDoc(organiserRef);
 
-      if (organiserSnap.exists()) {
-        navigate("/organiser");
-      } else {
-        navigate("/homepage");
+      if (!organiserSnap.exists()) {
+        await signOut(auth);
+        setError("Access denied. You are not an organiser.");
+        return;
       }
+
+      navigate("/adminHomepage");
     } catch (err) {
       console.error(err);
       setError("Google sign-in failed.");
@@ -110,7 +112,7 @@ const Login = () => {
             type="submit"
             className="w-[295px] py-3 bg-[#246d8c] text-white rounded-md"
           >
-            Log in
+            Admin Log in
           </button>
         </form>
       </div>
@@ -118,4 +120,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default AdminLogin;
