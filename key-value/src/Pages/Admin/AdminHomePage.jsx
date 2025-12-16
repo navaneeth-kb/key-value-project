@@ -5,6 +5,7 @@ import {
   WrenchScrewdriverIcon,
   UserIcon,
   PlusIcon,
+  CheckCircleIcon,
 } from "@heroicons/react/24/outline";
 import { onAuthStateChanged } from "firebase/auth";
 import {
@@ -13,6 +14,7 @@ import {
   getDoc,
   getDocs,
   setDoc,
+  deleteDoc,
 } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 import hi from "../../assets/Home/hi.svg";
@@ -46,14 +48,26 @@ const AdminHomePage = () => {
   const [globalMonth, setGlobalMonth] = useState("");
   const [globalAmount, setGlobalAmount] = useState("");
 
+  /* ================= MAINTENANCE ================= */
+  const [maintenanceList, setMaintenanceList] = useState([]);
+  const [maintenanceSearch, setMaintenanceSearch] = useState("");
+  const [showAddMaint, setShowAddMaint] = useState(false);
+  const [newMaint, setNewMaint] = useState({
+    room: "",
+    desc: "",
+    status: "undone",
+  });
+
   /* ================= LOAD DATA ================= */
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       if (!user) return;
 
+      // 1. Admin Name
       const adminSnap = await getDoc(doc(db, "organiser", user.email));
       setAdminName(adminSnap.exists() ? adminSnap.data().name : "Admin");
 
+      // 2. Tenants
       const tenantsSnap = await getDocs(collection(db, "tenants"));
       setTenants(
         tenantsSnap.docs.map((d) => ({
@@ -62,12 +76,21 @@ const AdminHomePage = () => {
         }))
       );
 
+      // 3. Rent
       const rentSnap = await getDocs(collection(db, "rent"));
       const rentData = {};
       rentSnap.forEach((d) => {
         rentData[d.id] = d.data();
       });
       setRentMap(rentData);
+
+      // 4. Maintenance
+      const maintSnap = await getDocs(collection(db, "maintenance"));
+      const maintData = maintSnap.docs.map((d) => ({
+        id: d.id, // This is the room number per your schema
+        ...d.data(),
+      }));
+      setMaintenanceList(maintData);
 
       setLoading(false);
     });
@@ -91,7 +114,7 @@ const AdminHomePage = () => {
     setShowAddTenant(false);
   };
 
-  /* ================= RENT ================= */
+  /* ================= RENT LOGIC ================= */
   const openRentModal = (tenant) => {
     setSelectedTenant(tenant);
     setShowRentModal(true);
@@ -127,6 +150,45 @@ const AdminHomePage = () => {
     setGlobalAmount("");
   };
 
+  /* ================= MAINTENANCE LOGIC ================= */
+  const handleAddMaintenance = async () => {
+    // Validation
+    if (!newMaint.room || !newMaint.desc) return;
+
+    // Design: Doc ID is the room number
+    const docId = newMaint.room;
+
+    await setDoc(doc(db, "maintenance", docId), {
+      desc: newMaint.desc,
+      status: "undone",
+    });
+
+    // Update Local State (Check if exists to update or add new)
+    setMaintenanceList((prev) => {
+      // Remove existing if overwriting (since ID is unique)
+      const filtered = prev.filter((item) => item.id !== docId);
+      return [
+        ...filtered,
+        { id: docId, desc: newMaint.desc, status: "undone" },
+      ];
+    });
+
+    setNewMaint({ room: "", desc: "", status: "undone" });
+    setShowAddMaint(false);
+  };
+
+  const markMaintenanceDone = async (roomId) => {
+    // Requirement: If status is done, remove the complaint
+    try {
+      await deleteDoc(doc(db, "maintenance", roomId));
+
+      // Remove from local state
+      setMaintenanceList((prev) => prev.filter((item) => item.id !== roomId));
+    } catch (error) {
+      console.error("Error deleting maintenance doc:", error);
+    }
+  };
+
   /* ================= FILTERS ================= */
   const filteredTenants = tenants.filter(
     (t) =>
@@ -141,12 +203,17 @@ const AdminHomePage = () => {
       t.id.toLowerCase().includes(rentSearchQuery.toLowerCase())
   );
 
+  // Maintenance search by Room ID (which is the doc ID)
+  const filteredMaintenance = maintenanceList.filter((m) =>
+    m.id.toLowerCase().includes(maintenanceSearch.toLowerCase())
+  );
+
   /* ================= UI ================= */
   return (
     <div className="w-full min-h-screen bg-[#F6FCF7] pb-20">
       {/* HERO */}
       <div className="relative max-w-3xl mx-auto px-4 pt-6 mb-6">
-        <img src={hi} className="w-full rounded-2xl" />
+        <img src={hi} className="w-full rounded-2xl" alt="Welcome" />
         <div className="absolute top-10 left-6 text-white">
           <h1 className="text-xl font-semibold">Welcome back</h1>
           <h2 className="text-3xl font-extrabold">{adminName}</h2>
@@ -242,6 +309,58 @@ const AdminHomePage = () => {
         </>
       )}
 
+      {/* ================= MAINTENANCE TAB ================= */}
+      {activeTab === "maintenance" && (
+        <>
+          <div className="max-w-3xl mx-auto px-4 flex gap-2 mb-4">
+            <input
+              placeholder="Search by Room Number..."
+              value={maintenanceSearch}
+              onChange={(e) => setMaintenanceSearch(e.target.value)}
+              className="flex-1 px-4 py-3 border rounded-lg"
+            />
+            <button
+              onClick={() => setShowAddMaint(true)}
+              className="px-4 py-3 bg-orange-500 text-white rounded-lg flex gap-1"
+            >
+              <PlusIcon className="h-5 w-5" /> New
+            </button>
+          </div>
+
+          <div className="max-w-3xl mx-auto px-4 space-y-4">
+            {filteredMaintenance.length === 0 ? (
+              <p className="text-center text-gray-500 mt-10">
+                No active complaints found.
+              </p>
+            ) : (
+              filteredMaintenance.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-white p-4 rounded-xl shadow flex justify-between items-start"
+                >
+                  <div>
+                    <h3 className="font-bold text-lg text-gray-800">
+                      Room {item.id}
+                    </h3>
+                    <p className="text-gray-600 mt-1">{item.desc}</p>
+                    <span className="inline-block mt-2 px-2 py-1 bg-red-100 text-red-600 text-xs font-semibold rounded">
+                      {item.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => markMaintenanceDone(item.id)}
+                    className="p-2 bg-green-50 text-green-600 rounded-full hover:bg-green-100"
+                    title="Mark as Done (Delete)"
+                  >
+                    <CheckCircleIcon className="h-6 w-6" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
+
       {/* ================= RENT MODAL ================= */}
       {showRentModal && selectedTenant && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
@@ -310,6 +429,7 @@ const AdminHomePage = () => {
       {showAddTenant && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl w-[90%] max-w-sm">
+            <h3 className="text-lg font-semibold mb-3">Add New Tenant</h3>
             <input
               placeholder="Tenant ID"
               className="w-full mb-2 px-3 py-2 border rounded"
@@ -362,8 +482,53 @@ const AdminHomePage = () => {
         </div>
       )}
 
+      {/* ================= ADD MAINTENANCE MODAL ================= */}
+      {showAddMaint && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl w-[90%] max-w-sm">
+            <h3 className="text-lg font-semibold mb-3">Add Complaint</h3>
+            <p className="text-xs text-gray-500 mb-3">
+              One complaint per room (overwrites existing).
+            </p>
+
+            <input
+              placeholder="Room Number"
+              className="w-full mb-2 px-3 py-2 border rounded"
+              value={newMaint.room}
+              onChange={(e) =>
+                setNewMaint({ ...newMaint, room: e.target.value })
+              }
+            />
+            <textarea
+              placeholder="Complaint Description"
+              rows={3}
+              className="w-full mb-4 px-3 py-2 border rounded"
+              value={newMaint.desc}
+              onChange={(e) =>
+                setNewMaint({ ...newMaint, desc: e.target.value })
+              }
+            />
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowAddMaint(false)}
+                className="px-4 py-2 border rounded"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddMaintenance}
+                className="px-4 py-2 bg-orange-500 text-white rounded"
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ================= BOTTOM NAV ================= */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white h-16 border-t flex justify-around items-center">
+      <div className="fixed bottom-0 left-0 right-0 bg-white h-16 border-t flex justify-around items-center z-40">
         <button
           onClick={() => setActiveTab("tenants")}
           className={`flex flex-col items-center ${
@@ -384,9 +549,14 @@ const AdminHomePage = () => {
           <span className="text-xs">Rent</span>
         </button>
 
-        <button className="flex flex-col items-center text-gray-500">
+        <button
+          onClick={() => setActiveTab("maintenance")}
+          className={`flex flex-col items-center ${
+            activeTab === "maintenance" ? "text-blue-500" : "text-gray-500"
+          }`}
+        >
           <WrenchScrewdriverIcon className="h-6 w-6" />
-          <span className="text-xs">Maintenance</span>
+          <span className="text-xs">Maint.</span>
         </button>
 
         <button className="flex flex-col items-center text-gray-500">
